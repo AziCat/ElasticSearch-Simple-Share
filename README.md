@@ -6,7 +6,7 @@
     * 安装并运行Elasticsearch
     * 与Elasticsearch交互
     * 面向文档
-    * 名词解释
+    * 基本概念
     * 索引创建与删除
     * 文档简单的CURD操作
 * 深入了解
@@ -63,6 +63,7 @@ curl 'http://localhost:9200/?pretty'
 ```
 ![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/tip.png)| 没有安装curl的可以用Sense或者Postman之类的工具发送Restful请求
 ------------|------
+
 如果启动成功，会获得以下的返回内容
 ```json
 {
@@ -112,6 +113,7 @@ curl 'http://localhost:9200/?pretty'
 
 ![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/note.png)| Elasticsearch 为以下语言提供了官方客户端 --Groovy、JavaScript、.NET、 PHP、 Perl、 Python 和 Ruby--还有很多社区提供的客户端和插件，所有这些都可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html)  中找到。
 ------------|------
+
 一个 Elasticsearch 请求和任何 HTTP 请求一样由若干相同的部件组成：
 ```
 curl -X<VERB> '<PROTOCOL>://<HOST>:<PORT>/<PATH>?<QUERY_STRING>' -d '<BODY>'
@@ -244,3 +246,5 @@ Elasticsearch ⇒ Indices ⇒ Types ⇒ Documents ⇒ Fields
    }
 }
 ```
+### 基本概念 ###
+
