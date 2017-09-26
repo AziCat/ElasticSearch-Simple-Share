@@ -103,6 +103,7 @@ curl 'http://localhost:9200/?pretty'
 
 ![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/tip.png)| Java 客户端作为节点必须和 Elasticsearch 有相同的 主要 版本
 ------------|------
+
 更多的 Java 客户端信息可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html) 中找到。
 
 **RESTful API with JSON over HTTP**
