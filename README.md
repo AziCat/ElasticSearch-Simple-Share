@@ -111,7 +111,7 @@ curl 'http://localhost:9200/?pretty'
 
 所有其他语言可以使用 RESTful API 通过端口 9200 和 Elasticsearch 进行通信，你可以用你最喜爱的 web 客户端访问 Elasticsearch 。事实上，正如你所看到的，你甚至可以使用 curl 命令来和 Elasticsearch 交互。
 
-![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/note.png)| Elasticsearch 为以下语言提供了官方客户端 --Groovy、JavaScript、.NET、 PHP、 Perl、 Python 和 Ruby--还有很多社区提供的客户端和插件，所有这些都可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html)  中找到。
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/note.png)| 多语言插件支持，所有这些都可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html)  中找到。
 ------------|------
 
 一个 Elasticsearch 请求和任何 HTTP 请求一样由若干相同的部件组成：
