@@ -101,7 +101,7 @@ curl 'http://localhost:9200/?pretty'
 两个 Java 客户端都是通过`9300`端口并使用本地 Elasticsearch 传输 协议和集群交互。
 集群中的节点通过端口`9300`彼此通信。如果这个端口没有打开，节点将无法形成一个集群。
 
-![](tip.png)| Java 客户端作为节点必须和 Elasticsearch 有相同的 主要 版本
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/tip.png)| Java 客户端作为节点必须和 Elasticsearch 有相同的 主要 版本
 ------------|------
 更多的 Java 客户端信息可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html) 中找到。
 
