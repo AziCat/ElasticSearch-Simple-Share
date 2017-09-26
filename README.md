@@ -46,7 +46,7 @@ Elasticsearch 不仅仅是 Lucene，并且也不仅仅只是一个全文搜索�
 ### 安装并运行 Elasticsearch ###
 安装 Elasticsearch 之前，你需要先安装一个较新的版本的 Java。
 
-![](warning.png)| **ElasticSearch 的5.x版本基于jdk1.8版本。**
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/warning.png)| **ElasticSearch 的5.x版本基于jdk1.8版本。**
 ------------|------
 
 安装完jdk后可以从 elastic 的官网 [elastic.co/downloads/elasticsearch](elastic.co/downloads/elasticsearch) 获取最新版本的 Elasticsearch。
@@ -61,7 +61,7 @@ bin\elasticsearch.bat
 ```
 curl 'http://localhost:9200/?pretty'
 ```
-![](tip.png)| 没有安装curl的可以用Sense或者Postman之类的工具发送Restful请求
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/tip.png)| 没有安装curl的可以用Sense或者Postman之类的工具发送Restful请求
 ------------|------
 如果启动成功，会获得以下的返回内容
 ```json
@@ -110,7 +110,7 @@ curl 'http://localhost:9200/?pretty'
 
 所有其他语言可以使用 RESTful API 通过端口 9200 和 Elasticsearch 进行通信，你可以用你最喜爱的 web 客户端访问 Elasticsearch 。事实上，正如你所看到的，你甚至可以使用 curl 命令来和 Elasticsearch 交互。
 
-![](note.png)| Elasticsearch 为以下语言提供了官方客户端 --Groovy、JavaScript、.NET、 PHP、 Perl、 Python 和 Ruby--还有很多社区提供的客户端和插件，所有这些都可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html)  中找到。
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/note.png)| Elasticsearch 为以下语言提供了官方客户端 --Groovy、JavaScript、.NET、 PHP、 Perl、 Python 和 Ruby--还有很多社区提供的客户端和插件，所有这些都可以在 [Elasticsearch Clients](https://www.elastic.co/guide/en/elasticsearch/client/index.html)  中找到。
 ------------|------
 一个 Elasticsearch 请求和任何 HTTP 请求一样由若干相同的部件组成：
 ```
@@ -140,10 +140,6 @@ Relational DB ⇒ Databases ⇒ Tables ⇒ Rows ⇒ Columns
 
 Elasticsearch ⇒ Indices ⇒ Types ⇒ Documents ⇒ Fields
 ```
-作者：赵光明
-链接：https://www.zhihu.com/question/26446020/answer/42049774
-来源：知乎
-著作权归作者所有，转载请联系作者获得授权。
 
 文档举例,它代表了一个 b_asj_aj 对象：
 ```
