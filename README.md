@@ -431,10 +431,192 @@ elasticsearch的config文件夹里面有三个配置文件：
 * jvm.options JVM相关参数配置
 * log4j2.properties 日志配置文件，es是使用log4j来记录日志的，所以logging.yml里的设置按普通log4j配置文件来设置就行了。
 
-**cluster.name**
+**Cluster**
 
 cluster.name可以确定你的集群名称,当你的elasticsearch集群在同一个网段中elasticsearch会自动的找到具有相同cluster.name的elasticsearch服务。
 所以当同一个网段具有多个elasticsearch集群时cluster.name就成为同一个集群的标识。
 ```
 cluster.name: elasticsearch
 ```
+
+节点名称同理,可自动生成也可手动配置
+```
+node.name: node-1
+```
+允许一个节点是否可以成为一个master节点,es是默认集群中的第一台机器为master,如果这台机器停止就会重新选举master.
+```
+node.master: true
+```
+允许该节点存储数据(默认开启)
+```
+node.data: true
+```
+
+**Index**
+
+设置索引的分片数,默认为5
+```
+index.number_of_shards: 5
+```
+设置索引的副本数,默认为1:
+```
+index.number_of_replicas: 1
+```
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/note.png)|配置文件中提到的最佳实践是,如果服务器够多,可以将分片提高,尽量将数据平均分布到大集群中去<br>同时,如果增加副本数量可以有效的提高搜索性能 <br>需要注意的是,`number_of_shards`是索引创建后一次生成的,后续不可更改设置 <br>`number_of_replicas`是可以通过API去实时修改设置的
+----|----
+
+**Paths**
+
+配置文件存储位置
+```
+path.conf: /path/to/conf
+```
+数据存储位置(单个目录设置)
+```
+path.data: /path/to/data
+```
+多个数据存储位置,有利于性能提升
+```
+path.data: /path/to/data1,/path/to/data2
+```
+临时文件的路径
+```
+path.work: /path/to/work
+```
+日志文件的路径
+```
+path.logs: /path/to/logs
+```
+插件安装路径
+```
+path.plugins: /path/to/plugins
+```
+
+**Network And HTTP**
+
+设置绑定的ip地址,可以是ipv4或ipv6的,默认为0.0.0.0
+```
+network.bind_host: 192.168.0.1
+```
+设置其它节点和该节点交互的ip地址,如果不设置它会自动设置,值必须是个真实的ip地址
+```
+network.publish_host: 192.168.0.1
+```
+设置节点间交互的tcp端口,默认是9300
+```
+transport.tcp.port: 9300
+```
+设置对外服务的http端口,默认为9200
+```
+http.port: 9200
+```
+设置请求内容的最大容量,默认100mb
+```
+http.max_content_length: 100mb
+```
+
+**Discovery**
+
+设置这个参数来保证集群中的节点可以知道其它N个有master资格的节点.默认为1,官方推荐设置为(N/2)+1
+```
+discovery.zen.minimum_master_nodes: 1
+```
+探查的超时时间,默认3秒,提高一点以应对网络不好的时候,防止脑裂
+```
+discovery.zen.ping.timeout: 3s
+```
+这是一个集群中的主节点的初始列表,当节点(主节点或者数据节点)启动时使用这个列表进行探测
+```
+discovery.zen.ping.unicast.hosts: ["host1", "host2:port"]
+```
+
+### 集群内的原理 ###
+介绍 Elasticsearch 在分布式环境中的运行原理。
+在这里大概讲述下ES的扩容机制，以及如何处理硬件故障的内容(想起来市局停电带来的惨痛经历)。
+
+#### 空集群 ####
+如果我们启动了一个单独的节点，里面不包含任何的数据和 索引，那我们的集群看起来就是一个 `下图` “包含空内容节点的集群”。
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp1.png)
+
+一个运行中的 Elasticsearch 实例称为一个 节点，而集群是由一个或者多个拥有相同`cluster.name`配置的节点组成， 它们共同承担数据和负载的压力。当有节点加入集群中或者从集群中移除节点时，集群将会重新平均分布所有的数据。
+
+当一个节点被选举成为`主节点（Master）`时， 它将负责管理集群范围内的所有变更，例如增加、删除索引，或者增加、删除节点等。 而主节点并不需要涉及到文档级别的变更和搜索等操作，所以当集群只拥有一个主节点的情况下，即使流量的增加它也不会成为瓶颈。 任何节点都可以成为主节点。我们的示例集群就只有一个节点，所以它同时也成为了主节点。
+
+作为用户，我们可以将请求发送到 集群中的任何节点 ，包括主节点。 每个节点都知道任意文档所处的位置，并且能够将我们的请求直接转发到存储我们所需文档的节点。 无论我们将请求发送到哪个节点，它都能负责从各个包含我们所需文档的节点收集回数据，并将最终结果返回給客户端。 Elasticsearch 对这一切的管理都是透明的。
+
+#### 集群健康 ####
+Elasticsearch 的集群监控信息中包含了许多的统计数据，其中最为重要的一项就是`集群健康`， 它在`status`字段中展示为`green`、`yellow`或者`red`。
+```
+GET /_cluster/health
+```
+在一个不包含任何索引的空集群中，它将会有一个类似于如下所示的返回内容：
+```
+{
+   "cluster_name":          "elasticsearch",
+   "status":                "green",
+   "timed_out":             false,
+   "number_of_nodes":       1,
+   "number_of_data_nodes":  1,
+   "active_primary_shards": 0,
+   "active_shards":         0,
+   "relocating_shards":     0,
+   "initializing_shards":   0,
+   "unassigned_shards":     0
+}
+```
+* green 所有的主分片和副本分片都正常运行。
+* yellow 所有的主分片都正常运行，但不是所有的副本分片都正常运行。
+* red 有主分片没能正常运行。
+
+#### 添加索引 ####
+我们往 Elasticsearch 添加数据时需要用到 索引 —— 保存相关数据的地方。 索引实际上是指向一个或者多个物理`分片`的逻辑命名空间 。
+
+Elasticsearch 是利用分片将数据分发到集群内各处的。分片是数据的容器，文档保存在分片内，分片又被分配到集群内的各个节点里。 当你的集群规模扩大或者缩小时， Elasticsearch 会自动的在各节点中迁移分片，使得数据仍然均匀分布在集群里。
+
+一个分片可以是`主分片`或者`副本分片`。 索引内任意一个文档都归属于一个主分片，所以主分片的数目决定着索引能够保存的最大数据量。
+
+举例说明，创建索引`blogs`，设置主分片数为3，副本为1（副本1说明每个主分片有1个副本分片）
+```
+PUT /blogs
+{
+   "settings" : {
+      "number_of_shards" : 3,
+      "number_of_replicas" : 1
+   }
+}
+```
+我们的集群现在是下图“拥有一个索引的单节点集群”。所有3个主分片都被分配在 Node 1 。
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp2.png)
+
+如果我们现在查看集群健康， 我们将看到如下内容：
+```
+{
+  "cluster_name": "elasticsearch",
+  "status": "yellow",
+  "timed_out": false,
+  "number_of_nodes": 1,
+  "number_of_data_nodes": 1,
+  "active_primary_shards": 3,
+  "active_shards": 3,
+  "relocating_shards": 0,
+  "initializing_shards": 0,
+  "unassigned_shards": 3,
+  "delayed_unassigned_shards": 0,
+  "number_of_pending_tasks": 0,
+  "number_of_in_flight_fetch": 0,
+  "task_max_waiting_in_queue_millis": 0,
+  "active_shards_percent_as_number": 50
+}
+```
+* status：集群 status 值为 yellow 。
+* unassigned_shards ：没有被分配到任何节点的副本数。
+
+集群的健康状况为`yellow`则表示全部`主分片`都正常运行（集群可以正常服务所有请求），
+但是`副本`分片没有全部处在正常状态。
+ 实际上，所有3个副本分片都是 unassigned —— 它们都没有被分配到任何节点。
+ 在同一个节点上既保存原始数据又保存副本是没有意义的，因为一旦失去了那个节点，我们也将丢失该节点上的所有副本数据。
+
+当前我们的集群是正常运行的，但是在硬件故障时有丢失数据的风险。
+
