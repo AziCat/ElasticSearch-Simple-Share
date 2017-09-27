@@ -530,6 +530,8 @@ discovery.zen.ping.timeout: 3s
 discovery.zen.ping.unicast.hosts: ["host1", "host2:port"]
 ```
 
+## ##
+
 ### 集群内的原理 ###
 介绍 Elasticsearch 在分布式环境中的运行原理。
 在这里大概讲述下ES的扩容机制，以及如何处理硬件故障的内容(想起来市局停电带来的惨痛经历)。
@@ -620,3 +622,382 @@ PUT /blogs
 
 当前我们的集群是正常运行的，但是在硬件故障时有丢失数据的风险。
 
+#### 添加故障转移编辑 ####
+
+当集群中只有一个节点在运行时，意味着会有一个单点故障问题。
+幸运的是，我们只需再启动一个节点即可防止数据丢失。
+
+启动第二个节点|
+----|
+为了测试第二个节点启动后的情况，你可以在同一个目录内，完全依照启动第一个节点的方式来启动一个新节点（参考[安装并运行 Elasticsearch](https://www.elastic.co/guide/cn/elasticsearch/guide/current/running-elasticsearch.html)）。多个节点可以共享同一个目录。当你在同一台机器上启动了第二个节点时，只要它和第一个节点有同样的 cluster.name 配置，它就会自动发现集群并加入到其中。 但是在不同机器上启动节点的时候，为了加入到同一集群，你需要配置一个可连接到的单播主机列表。 详细信息请查看[单播代替组播](https://www.elastic.co/guide/cn/elasticsearch/guide/current/important-configuration-changes.html#unicast)。|
+
+如果启动了第二个节点，我们的集群将会如下图“拥有两个节点的集群——所有主分片和副本分片都已被分配”所示。
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp3.png)
+
+当第二个节点加入到集群后，3个`副本分片`将会分配到这个节点上——每个主分片对应一个副本分片。 这意味着当集群内任何一个节点出现问题时，我们的数据都完好无损。
+
+所有新近被索引的文档都将会保存在主分片上，然后被并行的复制到对应的副本分片上。这就保证了我们既可以从主分片又可以从副本分片上获得文档。
+
+`cluster-health`现在展示的状态为`green`，这表示所有6个分片（包括3个主分片和3个副本分片）都在正常运行。
+
+```
+{
+  "cluster_name": "elasticsearch",
+  "status": "green",
+  "timed_out": false,
+  "number_of_nodes": 2,
+  "number_of_data_nodes": 2,
+  "active_primary_shards": 3,
+  "active_shards": 6,
+  "relocating_shards": 0,
+  "initializing_shards": 0,
+  "unassigned_shards": 0,
+  "delayed_unassigned_shards": 0,
+  "number_of_pending_tasks": 0,
+  "number_of_in_flight_fetch": 0,
+  "task_max_waiting_in_queue_millis": 0,
+  "active_shards_percent_as_number": 100
+}
+```
+
+#### 水平扩容 ####
+
+怎样为我们的正在增长中的应用程序按需扩容呢？ 当启动了第三个节点，我们的集群将会看起来如下图“拥有三个节点的集群——为了分散负载而对分片进行重新分配”所示。
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp4.png)
+
+`Node 1`和`Node 2`上各有一个分片被迁移到了新的`Node 3`节点，现在每个节点上都拥有2个分片，而不是之前的3个。 这表示每个节点的硬件资源（CPU, RAM, I/O）将被更少的分片所共享，每个分片的性能将会得到提升。
+
+分片是一个功能完整的搜索引擎，它拥有使用一个节点上的所有资源的能力。 我们这个拥有6个分片（3个主分片和3个副本分片）的索引可以最大扩容到6个节点，每个节点上存在一个分片，并且每个分片拥有所在节点的全部资源。
+
+#### 更多的扩容 ###
+
+但是如果我们想要扩容超过6个节点怎么办呢？
+
+主分片的数目在索引创建时 就已经确定了下来。实际上，这个数目定义了这个索引能够存储的最大数据量。（实际大小取决于你的数据、硬件和使用场景。） 但是，读操作——搜索和返回数据——可以同时被`主分片`或`副本分片`所处理，所以当你拥有越多的副本分片时，也将拥有越高的吞吐量。
+
+在运行中的集群上是可以动态调整副本分片数目的 ，我们可以按需伸缩集群。让我们把副本数从默认的`1`增加到`2`：
+```
+PUT /blogs/_settings
+{
+   "number_of_replicas" : 2
+}
+```
+
+如下图“将参数 number_of_replicas 调大到 2”所示， blogs 索引现在拥有9个分片：3个主分片和6个副本分片。 这意味着我们可以将集群扩容到9个节点，每个节点上一个分片。
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp5.png)
+
+#### 应对故障 ####
+
+我们之前说过 Elasticsearch 可以应对节点故障，接下来让我们尝试下这个功能。 如果我们关闭第一个节点，这时集群的状态为下图“关闭了一个节点后的集群”
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp6.png)
+
+我们关闭的节点是一个主节点。而集群必须拥有一个主节点来保证正常工作，所以发生的第一件事情就是选举一个新的主节点： Node 2 。
+
+在我们关闭 Node 1 的同时也失去了主分片 1 和 2 ，并且在缺失主分片的时候索引也不能正常工作。 如果此时来检查集群的状况，我们看到的状态将会为 red ：不是所有主分片都在正常工作。
+
+幸运的是，在其它节点上存在着这两个主分片的完整副本， 所以新的主节点立即将这些分片在 Node 2 和 Node 3 上对应的副本分片提升为主分片， 此时集群的状态将会为 yellow 。 这个提升主分片的过程是瞬间发生的，如同按下一个开关一般。
+
+为什么我们集群状态是 yellow 而不是 green 呢？ 虽然我们拥有所有的三个主分片，但是同时设置了每个主分片需要对应2份副本分片，而此时只存在一份副本分片。 所以集群不能为 green 的状态，不过我们不必过于担心：如果我们同样关闭了 Node 2 ，我们的程序 依然 可以保持在不丢任何数据的情况下运行，因为 Node 3 为每一个分片都保留着一份副本。
+
+如果我们重新启动 Node 1 ，集群可以将缺失的副本分片再次进行分配。如果 Node 1 依然拥有着之前的分片，它将尝试去重用它们，同时仅从主分片复制发生了修改的数据文件。
+
+## ##
+
+### 映射和分析 ###
+
+#### 倒排索引(inverted index) ####
+传统的关系型数据库，可以通过给某列建立一个B树索引来加快检索的速度。
+而Elasticsearch与之相反，其使用一种称为`倒排索引`的结构，它适用于快速的全文搜索。
+一个倒排索引由文档中所有不重复词的列表构成，对于其中每个词，有一个包含它的文档列表。
+
+例如，假设我们有两个文档，每个文档的 content 域包含如下内容：
+
+* The quick brown fox jumped over the lazy dog
+* Quick brown foxes leap over lazy dogs in summer
+
+为了创建倒排索引，我们首先将每个文档的 content 域`拆分`成单独的`词（我们称它为 词条 或 tokens ）`，创建一个包含所有不重复词条的排序列表，然后列出每个词条出现在哪个文档。结果如下所示：
+```
+Term      Doc_1  Doc_2
+-------------------------
+Quick   |       |  X
+The     |   X   |
+brown   |   X   |  X
+dog     |   X   |
+dogs    |       |  X
+fox     |   X   |
+foxes   |       |  X
+in      |       |  X
+jumped  |   X   |
+lazy    |   X   |  X
+leap    |       |  X
+over    |   X   |  X
+quick   |   X   |
+summer  |       |  X
+the     |   X   |
+------------------------
+```
+
+现在，如果我们想搜索 quick brown ，我们只需要查找包含每个词条的文档：
+```
+Term      Doc_1  Doc_2
+-------------------------
+brown   |   X   |  X
+quick   |   X   |
+------------------------
+Total   |   2   |  1
+```
+
+两个文档都匹配，但是第一个文档比第二个匹配度更高。如果我们使用仅计算匹配词条数量的简单`相似性算法`，那么，我们可以说，对于我们查询的相关性来讲，第一个文档比第二个文档更佳。
+
+#### 分析与分析器 ####
+
+`分析`包含下面的过程：
+
+* 首先，将一块文本分成适合于倒排索引的独立的 词条 ，
+* 之后，将这些词条统一化为标准格式以提高它们的“可搜索性”
+
+分析器执行上面的工作。 分析器 实际上是将三个功能封装到了一个包里：
+
+**字符过滤器**
+
+首先，字符串按顺序通过每个 字符过滤器 。他们的任务是在分词前整理字符串。一个字符过滤器可以用来去掉HTML，或者将 & 转化成 `and`。
+
+**分词器**
+
+其次，字符串被 分词器 分为单个的词条。一个简单的分词器遇到空格和标点的时候，可能会将文本拆分成词条。
+
+**Token 过滤器**
+
+最后，词条按顺序通过每个 token 过滤器 。这个过程可能会改变词条（例如，小写化 Quick ），删除词条（例如， 像 a`， `and`， `the 等无用词），或者增加词条（例如，像 jump 和 leap 这种同义词）。
+
+Elasticsearch提供了开箱即用的字符过滤器、分词器和token 过滤器。 这些可以组合起来形成自定义的分析器以用于不同的目的。
+
+#### 内置分析器 ####
+但是， Elasticsearch还附带了可以直接使用的预包装的分析器。 接下来我们会列出最重要的分析器。为了证明它们的差异，我们看看每个分析器会从下面的字符串得到哪些词条：
+```
+"Set the shape to semi-transparent by calling set_trans(5)"
+```
+
+**标准分析器**
+
+标准分析器是Elasticsearch默认使用的分析器。它是分析各种语言文本最常用的选择。它根据 Unicode 联盟 定义的 单词边界 划分文本。删除绝大部分标点。最后，将词条小写。它会产生
+```
+set, the, shape, to, semi, transparent, by, calling, set_trans, 5
+```
+**简单分析器**
+
+简单分析器在任何不是字母的地方分隔文本，将词条小写。它会产生
+```
+set, the, shape, to, semi, transparent, by, calling, set, trans
+```
+**空格分析器**
+
+空格分析器在空格的地方划分文本。它会产生
+```
+Set, the, shape, to, semi-transparent, by, calling, set_trans(5)
+```
+**语言分析器**
+特定语言分析器可用于[很多语言](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/analysis-lang-analyzer.html)(并不包括中文= =日文韩文这种块型语言也不包括)。
+它们可以考虑指定语言的特点。
+例如， `english`分析器附带了一组英语无用词（常用单词，例如 and 或者 the ，它们对相关性没有多少影响），它们会被删除。
+由于理解英语语法的规则，这个分词器可以提取英语单词的`词干`。
+
+`english`分词器会产生下面的词条：
+```
+set, shape, semi, transpar, call, set_tran, 5
+```
+注意看 transparent\`、 \`calling 和 set_trans 已经变为词根格式。
+
+#### 什么时候使用分析器 ####
+当我们`索引`一个文档，它的全文域被分析成词条以用来创建倒排索引。
+但是，当我们在全文域`搜索`的时候，我们需要将查询字符串通过`相同的分析过程`，
+以保证我们搜索的词条格式与索引中的词条格式一致。
+* 当你查询一个`全文`域时， 会对查询字符串应用相同的分析器，以产生正确的搜索词条列表。
+* 当你查询一个`精确值`域时，不会分析查询字符串， 而是搜索你指定的精确值。
+
+我们可以通过[Mapping API](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/mapping.html)来设置分析器
+
+#### 映射(Mapping) ####
+
+在传统数据库中，我们建表的时候要指定字段的类型、主键、长度、默认值等等，
+而ES的映射操作就是类似这样的操作。
+为ES的`文档`的字段设置类型、分析器、过滤器等等。
+
+**字段数据类型**
+
+ES支持以下多种的数据类型：
+* 字符串
+    * text and keyword
+* 数字
+    * long, integer, short, byte, double, float, half_float, scaled_float
+* 日期
+    * date
+* 布尔型
+    * boolean
+* 二进制
+    * binary
+* 范围
+    * integer_range, float_range, long_range, double_range, date_range
+
+复杂的数据类型
+
+* 数组
+    * Array support does not require a dedicated type
+* 对象
+    * object for single JSON objects
+* 嵌套
+    * nested for arrays of JSON objects
+
+**查看映射**
+
+通过 /_mapping ，我们可以查看 Elasticsearch 在一个或多个索引中的一个或多个类型的映射 。
+```
+GET /index/_mapping/type
+```
+
+**analyzer**
+
+对于`analyzed`字符串域，用`analyzer`属性指定在搜索和索引时使用的分析器。
+默认， Elasticsearch 使用`standard`分析器，但你可以指定一个内置的分析器替代它，
+例如`whitespace`、`simple` 和 `english`，也可以配置为第三方的分析器插件（需要另外安装）：
+```
+PUT /index/type/_mapping
+{
+   "properties": {
+      "field": {
+         "search_analyzer": "simple",
+         "analyzer": "simple",
+         "type": "string"
+      }
+   }
+}
+```
+
+**更新映射**
+
+当你首次创建一个索引的时候，可以指定类型的映射。你也可以使用`/_mapping`为新类型增加映射。
+
+但是当索引有数据时，说明倒排索引已经创建，这时候不能修改映射，所以只能通过`删除`原来的索引，然后再重新建立索引和映射。。。
+
+#### 排序与相关性 ####
+默认情况下，返回的结果是按照`相关性`进行排序的——最相关的文档排在最前。
+这里大概解释一下`相关性`意味着什么以及它是如何计算的，同时介绍一下使用`sort`参数进行自定义的排序。
+
+**排序**
+
+为了按照相关性来排序，需要将相关性表示为一个数值。
+在 Elasticsearch 中，`相关性得分`由一个浮点数进行表示，并在搜索结果中通过`_score`参数返回， 默认排序是`_score`降序。
+```
+{
+   "took": 11,
+   "timed_out": false,
+   "_shards": {
+      "total": 5,
+      "successful": 5,
+      "failed": 0
+   },
+   "hits": {
+      "total": 1,
+      "max_score": 1,
+      "hits": [
+         {
+            "_index": "sinobest",
+            "_type": "employee",
+            "_id": "1",
+            "_score": 1,
+            "_source": {
+               "name": "张三",
+               "age": 25,
+               "position": "程序员",
+               "interests": [
+                  "吃饭",
+                  "睡觉",
+                  "写bug"
+               ],
+               "jobNums": 1234
+            }
+         }
+      ]
+   }
+}
+```
+当我们想按实际的使用情况来排序，比如年龄的大小，这时候我们可以使用`sort`参数：
+```
+GET /_search
+{
+    "query" : {
+        "bool" : {
+            "filter" : { "term" : { "name" : "张三" }}
+        }
+    },
+    "sort": { "age": { "order": "desc" }}
+}
+```
+返回结果中的`_score`为null：
+```
+{
+   "took": 11,
+   "timed_out": false,
+   "_shards": {
+      "total": 5,
+      "successful": 5,
+      "failed": 0
+   },
+   "hits": {
+      "total": 1,
+      "max_score": null,
+      "hits": [
+         {
+            "_index": "sinobest",
+            "_type": "employee",
+            "_id": "1",
+            "_score": null,
+            "_source": {
+               "name": "张三",
+               "age": 25,
+               "position": "程序员",
+               "interests": [
+                  "吃饭",
+                  "睡觉",
+                  "写bug"
+               ],
+               "jobNums": 1234
+            }
+         }
+      ]
+   }
+}
+```
+
+**什么是相关性**
+
+默认情况下，返回结果是按相关性倒序排列的。 但是什么是相关性？ 相关性如何计算？
+
+Elasticsearch 的相似度算法被定义为`检索词频率/反向文档频率`，`TF/IDF`，包括以下内容：
+
+项|说明
+----|----
+检索词频率|检索词在该字段出现的频率？出现频率越高，相关性也越高。 字段中出现过 5 次要比只出现过 1 次的相关性高。
+反向文档频率|每个检索词在索引中出现的频率？频率越高，相关性越低。检索词出现在多数文档中会比出现在少数文档中的权重更低。
+字段长度准则|字段的长度是多少？长度越长，相关性越低。 检索词出现在一个短的 title 要比同样的词出现在一个长的 content 字段权重更大。
+
+相关性并不只是全文本检索的专利。也适用于 yes|no 的子句，匹配的子句越多，相关性评分越高。
+
+如果多条查询子句被合并为一条复合查询语句 ，比如`bool`查询，则每个查询子句计算得出的评分会被合并到总的相关性评分中。
+
+**执行计划**
+
+当在传统数据库调优一个复杂的sql的时候，通常会用到执行计划，来查看sql执行的时间损耗在哪个方面。
+同理，ElasticSearch也可以通过`explain `参数来查看当次查询的细节。
+```
+GET /_search?explain
+{
+   "query"   : { "match" : { "name" : "张三" }}
+}
+```
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/warning.png)| 输出 explain 结果代价是十分昂贵的，<br>它只能用作调试工具 。千万不要用于生产环境。
+------------|------
