@@ -247,4 +247,194 @@ Elasticsearch ⇒ Indices ⇒ Types ⇒ Documents ⇒ Fields
 }
 ```
 ### 基本概念 ###
+* 集群 （Cluster）
+* 节点 （Node）
+* 索引 （Index）
+* 类型 （Type）
+* 文档 （Document）
+* 分片与副本（Shards & Replicas）
 
+**集群 （Cluster）**
+
+一个ES集群可以由一个或者多个节点（nodes or servers）组成。
+所有这些节点用来存储所有的数据以及提供联合索引，为我们提供跨节点查询的能力。
+一个ES集群的名称是唯一的，默认情况下为“elasticsearch”。这个名称非常重要，因为一个节点（node）会通过这个名称来判断是否加入已有的集群。
+`必须保证在不同环境下使用不同的集群名称，否则节点可能会加入错误的集群。`
+
+**节点 （Node）**
+
+一个节点是一个集群中的一台服务器，它用来存储数据，参与集群的索引以及提供搜索能力。
+可以简单的理解为一个ElasticSearch的启动实例，在集群中，节点是由它的唯一名称来做为标识。
+这个名称对于管理ES集群非常重要，我们用它来定位网络或集群中的某一节点。
+一个节点可以通过指定集群名称让它加入某个集群。
+在单集群下，我们可以有任意数量的节点，如果当前网络下没有任何ES节点，那么在启动节点后，当前节点会默认形成一个单节点集群。
+
+**索引 （Index）**
+
+一个索引是一组具有相似特性的文档的集合。
+一个索引由它的名称唯一标识`（必须所有字母为小写字母）`。
+在一个单集群下，我们可以定义任意多的索引。
+
+**类型 （Type）**
+
+在一个索引下，我们可以定义一个或多个类型（types）。
+一个类型是一个索引逻辑分类或分区（category/partition），而分类或分区的划分方法由我们自己决定。
+通常情况下，我们会为具有相类似的字段的一组文档定义类型。
+比如，如果我们运行一个博客平台，所有的数据都使用同一索引，我们为用户数据定义一种类型，为博客数据定义另一种类型，同时为评论数据定义另一种类型。
+
+**文档 （Document）**
+
+一个文档是一个可以被索引的基本信息单元。
+可以理解为传统关系型数据库的表中的一条数据。
+
+**分片与副本（Shards & Replicas）**
+
+一个索引可能会存储大量数据从而超过单个节点硬件的限制。
+为了解决这个问题，ES提供了一种分片（shard）能力，让我们将一个索引切分成片。
+当我们创建一个索引时，我们可以为它指定分片的数量。
+每个分片自己都能独立工作，并且存在与集群的任一节点中。
+至于副本（Replicas）则是分片的备份文件。
+分片数和副本数可以通过配置来进行修改。
+
+### 索引创建与删除 ###
+
+一个 Elasticsearch 集群可以`包含多个`索引 ，相应的每个索引可以包含多个`类型`。
+这些不同的类型存储着多个`文档`，每个文档又有多个`属性`。
+
+下面举例创建一个保存员工信息的索引：
+
+* 每个员工索引一个文档，包含该员工的所有信息。
+* 每个文档都将是**employee**类型 。
+* 该类型位于索引**sinobest**内。
+* 该索引保存在我们的 Elasticsearch 集群中。
+
+实践中这非常简单（尽管看起来有很多步骤），我们可以通过一条命令完成所有这些动作：
+```
+PUT /sinobest/employee/1
+{
+    "name" : "张三",
+    "age" :  25,
+    "position" : "程序员",
+    "interests": [ "吃饭", "睡觉", "写bug" ],
+    "jobNums" : 1234
+}
+```
+注意，路径 /sinobest/employee/1 包含了三部分的信息：
+
+* sinobest:索引名称
+* employee:类型名称
+* 1:特定雇员的ID
+
+操作成功后返回：
+```
+{
+   "_index": "sinobest",
+   "_type": "employee",
+   "_id": "1",
+   "_version": 1,
+   "result": "created",
+   "_shards": {
+      "total": 2,
+      "successful": 1,
+      "failed": 0
+   },
+   "created": true
+}
+```
+
+插入索引后通过以下命令查看当前索引的状态：
+```
+GET /_cat/indices
+```
+
+返回结果：
+```
+health status index    uuid                   pri rep docs.count docs.deleted store.size pri.store.size
+yellow open   sinobest Q1el2g90QhKD0jDNQxgXag   5   1          1            0      5.8kb          5.8kb
+```
+
+当我们想删除这个索引时，可以用DELETE命令：
+```
+DELETE /my_index
+```
+
+你也可以这样删除多个索引：
+```
+DELETE /index_one,index_two
+DELETE /index_*
+```
+
+你甚至可以这样删除`全部`索引：
+```
+DELETE /_all
+DELETE /*
+```
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/note.png)|对一些人来说，能够用单个命令来删除所有数据可能会导致可怕的后果。<br>如果你想要避免意外的大量删除, 你可以在你的 elasticsearch.yml 做如下配置：<br>action.destructive_requires_name: true<br>这个设置使删除只限于特定名称指向的数据,<br> 而不允许通过指定 _all 或通配符来删除指定索引库。<br>你同样可以通过 [Cluster State API](https://www.elastic.co/guide/cn/elasticsearch/guide/current/_changing_settings_dynamically.html) 动态的更新这个设置。
+----|----
+
+### 文档简单的CURD操作 ###
+
+**创建（Create）**
+```
+PUT /sinobest/employee/2
+{
+    "name" : "李四",
+    "age" :  21,
+    "position" : "项目经理",
+    "interests": [ "吃饭", "睡觉", "改需求" ],
+    "jobNums" : 4321
+}
+```
+
+**更新（Update）**
+```
+PUT /sinobest/employee/2
+{
+    "name" : "李四",
+    "age" :  22,
+    "position" : "项目经理",
+    "interests": [ "吃饭", "睡觉", "改需求" ],
+    "jobNums" : 4321
+}
+```
+
+**查找（Retrieve）**
+```
+GET /sinobest/employee/_search
+
+GET /sinobest/employee/_search?q=age:22
+
+GET /sinobest/employee/_search
+{
+    "query" : {
+        "match" : {
+            "name" : "李四"
+        }
+    }
+}
+```
+
+**删除（Delete）**
+```
+DELETE /sinobest/employee/2
+```
+
+## ##
+
+## 深入了解 ##
+
+### 自定义配置 ###
+
+elasticsearch的config文件夹里面有三个配置文件：
+* elasticsearch.yml ES的基本配置文件，主要讲解这里的常用配置
+* jvm.options JVM相关参数配置
+* log4j2.properties 日志配置文件，es是使用log4j来记录日志的，所以logging.yml里的设置按普通log4j配置文件来设置就行了。
+
+**cluster.name**
+
+cluster.name可以确定你的集群名称,当你的elasticsearch集群在同一个网段中elasticsearch会自动的找到具有相同cluster.name的elasticsearch服务。
+所以当同一个网段具有多个elasticsearch集群时cluster.name就成为同一个集群的标识。
+```
+cluster.name: elasticsearch
+```
