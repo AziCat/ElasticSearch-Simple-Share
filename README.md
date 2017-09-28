@@ -1268,7 +1268,7 @@ ikTokenList.forEach(ikToken -> {
         pretreatedCNList.add(item);
     }
 });
-``
+```
 
 #### Q: 索引重建 ####
 为了提高查询的精确度，经常会对索引的映射进行修改。但是对于有数据的索引来说，
