@@ -65,7 +65,7 @@ curl 'http://localhost:9200/?pretty'
 ------------|------
 
 如果启动成功，会获得以下的返回内容
-```json(type)
+```json
 {
   "name": "yjh-node1",
   "cluster_name": "es-cluster",
@@ -144,7 +144,7 @@ Elasticsearch ⇒ Indices ⇒ Types ⇒ Documents ⇒ Fields
 ```
 
 文档举例,它代表了一个 b_asj_aj 对象：
-```json(type)
+```json
 {
    "_index": "aj",
    "_type": "b_asj_aj",
@@ -553,7 +553,7 @@ Elasticsearch 的集群监控信息中包含了许多的统计数据，其中最
 GET /_cluster/health
 ```
 在一个不包含任何索引的空集群中，它将会有一个类似于如下所示的返回内容：
-```json(type)
+```json
 {
    "cluster_name":          "elasticsearch",
    "status":                "green",
@@ -593,7 +593,7 @@ PUT /blogs
 ![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp2.png)
 
 如果我们现在查看集群健康， 我们将看到如下内容：
-```json(type)
+```json
 {
   "cluster_name": "elasticsearch",
   "status": "yellow",
@@ -641,7 +641,7 @@ PUT /blogs
 
 `cluster-health`现在展示的状态为`green`，这表示所有6个分片（包括3个主分片和3个副本分片）都在正常运行。
 
-```json(type)
+```json
 {
   "cluster_name": "elasticsearch",
   "status": "green",
@@ -891,7 +891,7 @@ PUT /index/type/_mapping
 
 为了按照相关性来排序，需要将相关性表示为一个数值。
 在 Elasticsearch 中，`相关性得分`由一个浮点数进行表示，并在搜索结果中通过`_score`参数返回， 默认排序是`_score`降序。
-```json(type)
+```json
 {
    "took": 11,
    "timed_out": false,
@@ -938,7 +938,7 @@ GET /_search
 }
 ```
 返回结果中的`_score`为null：
-```json(type)
+```json
 {
    "took": 11,
    "timed_out": false,
@@ -1022,7 +1022,7 @@ POST _analyze
 }
 ```
 返回结果如下：
-```json(type)
+```json
 {
    "tokens": [
       {
@@ -1109,7 +1109,7 @@ POST _analyze
 }
 ```
 
-```json(type)
+```json
 {
    "tokens": [
       {
@@ -1174,7 +1174,7 @@ POST _analyze
 }
 ```
 
-```json(type)
+```json
 {
    "tokens": [
       {
@@ -1229,7 +1229,7 @@ POST _analyze
 我们想让分析器以`张小三`为一个词条而不是`张`和`小三`。这时候可以使用ik分词器的字典功能。
 
 修改分析器目录下的`config/IKAnalyzer.cfg.xml`
-```xml(type)
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
 <properties>
@@ -1248,7 +1248,7 @@ POST _analyze
 在使用中文分析器后，查询精度虽然提高了，但还是不准确，搜索`天河区天河公园`还是得不到想要的结果，
 但我发现关键字输入`天河区 天河 公园`，用空格隔开就能查询到很准确的结果。所以针对中文的关键字，
 还做了一下预处理（预分词）来提高查询准确度。
-```java(type)
+```java
 //分词器
 String analyzer = PropertiesUtil.getAsString(ES_CONFIG,"search.cn_analyzer");
 //构建分析请求
