@@ -710,8 +710,8 @@ PUT /blogs/_settings
 ### 映射和分析 ###
 
 #### 倒排索引(inverted index) ####
-传统的关系型数据库，可以通过给某列建立一个B树索引来加快检索的速度。
-而Elasticsearch与之相反，其使用一种称为`倒排索引`的结构，它适用于快速的全文搜索。
+传统的关系型数据库，可以通过给某列建立一个B树索引来加快检索的速度。通常是文档->关键字。
+而Elasticsearch与之相反，是关键字->文档。其使用一种称为`倒排索引`的结构，可能是因为将正常的索引倒过来了吧，所以大家叫他倒排索引，叫`反向索引`我觉得ok，它适用于快速的全文搜索。
 一个倒排索引由文档中所有不重复词的列表构成，对于其中每个词，有一个包含它的文档列表。
 
 例如，假设我们有两个文档，每个文档的 content 域包含如下内容：
@@ -1406,7 +1406,8 @@ ElasticSearch也有数量控制，也刚好是个整数1024。
 
 ## 参考内容 ##
 * [Elasticsearch: 权威指南](https://www.elastic.co/guide/cn/elasticsearch/guide/current/index.html)（难得的中文文档喔，不过针对的是 Elasticsearch 2.x的，阅读时请注意）
-* [Elasticsearch Reference](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/index.html)（官方文档，英语好的小伙伴可以看这个，针对5.5版本的，目前最新的更新为5.6版本）
+* [Elasticsearch Reference](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/index.html)（官方文档，英语好的小伙伴可以看这个，此处是5.5版本的，目前最新的更新为5.6版本）
 * [elastic/elasticsearch · GitHub](https://github.com/elastic/elasticsearch)（ElasticSearch的开源地址）
 * [java客户端 API](https://www.elastic.co/guide/en/elasticsearch/client/java-api/5.5/index.html)
 * 百度百科
+* 知乎
