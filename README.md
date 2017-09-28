@@ -24,8 +24,8 @@
         * 索引别名实现零停机
     * 检索关键字包含特殊字符
         * 保留字消义
-    * 检索关键字个数太多（https://github.com/elastic/elasticsearch/issues/482）
-    * 权限控制&监控（X-Pack Kibana）
+    * 检索关键字个数太多报错
+    * 权限控制&监控
 * 参考（~~Copy~~）内容
 ## ##
 
@@ -65,7 +65,7 @@ curl 'http://localhost:9200/?pretty'
 ------------|------
 
 如果启动成功，会获得以下的返回内容
-```json
+```json(type)
 {
   "name": "yjh-node1",
   "cluster_name": "es-cluster",
@@ -144,7 +144,7 @@ Elasticsearch ⇒ Indices ⇒ Types ⇒ Documents ⇒ Fields
 ```
 
 文档举例,它代表了一个 b_asj_aj 对象：
-```
+```json(type)
 {
    "_index": "aj",
    "_type": "b_asj_aj",
@@ -553,7 +553,7 @@ Elasticsearch 的集群监控信息中包含了许多的统计数据，其中最
 GET /_cluster/health
 ```
 在一个不包含任何索引的空集群中，它将会有一个类似于如下所示的返回内容：
-```
+```json(type)
 {
    "cluster_name":          "elasticsearch",
    "status":                "green",
@@ -593,7 +593,7 @@ PUT /blogs
 ![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/cp2.png)
 
 如果我们现在查看集群健康， 我们将看到如下内容：
-```
+```json(type)
 {
   "cluster_name": "elasticsearch",
   "status": "yellow",
@@ -641,7 +641,7 @@ PUT /blogs
 
 `cluster-health`现在展示的状态为`green`，这表示所有6个分片（包括3个主分片和3个副本分片）都在正常运行。
 
-```
+```json(type)
 {
   "cluster_name": "elasticsearch",
   "status": "green",
@@ -891,7 +891,7 @@ PUT /index/type/_mapping
 
 为了按照相关性来排序，需要将相关性表示为一个数值。
 在 Elasticsearch 中，`相关性得分`由一个浮点数进行表示，并在搜索结果中通过`_score`参数返回， 默认排序是`_score`降序。
-```
+```json(type)
 {
    "took": 11,
    "timed_out": false,
@@ -938,7 +938,7 @@ GET /_search
 }
 ```
 返回结果中的`_score`为null：
-```
+```json(type)
 {
    "took": 11,
    "timed_out": false,
@@ -1001,3 +1001,411 @@ GET /_search?explain
 ```
 ![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/warning.png)| 输出 explain 结果代价是十分昂贵的，<br>它只能用作调试工具 。千万不要用于生产环境。
 ------------|------
+
+## ##
+
+## 实际使用中的Q&A ##
+
+#### Q: 检索包含中文的关键字时返回结果不准确 ####
+在使用的过程中，我查询关键字`天河区天河公园`的时候，会把包含以下内容的文档全部返回出来，
+这显然是不对的。
+```
+天、河、区、公、园
+```
+ElasticSearch检索文档，是从`倒排索引`中查找包含此词条的文档，所以我在想是不是索引没建立好。
+当初建立索引的时候没有设置相关的映射，所以插入ElasticSearch的时候用的是默认的分析器，于是使用`Analyze API`检验一下。
+```
+POST _analyze
+{
+  "tokenizer": "standard",
+  "text":      "天河区天河公园"
+}
+```
+返回结果如下：
+```json(type)
+{
+   "tokens": [
+      {
+         "token": "天",
+         "start_offset": 0,
+         "end_offset": 1,
+         "type": "<IDEOGRAPHIC>",
+         "position": 0
+      },
+      {
+         "token": "河",
+         "start_offset": 1,
+         "end_offset": 2,
+         "type": "<IDEOGRAPHIC>",
+         "position": 1
+      },
+      {
+         "token": "区",
+         "start_offset": 2,
+         "end_offset": 3,
+         "type": "<IDEOGRAPHIC>",
+         "position": 2
+      },
+      {
+         "token": "天",
+         "start_offset": 3,
+         "end_offset": 4,
+         "type": "<IDEOGRAPHIC>",
+         "position": 3
+      },
+      {
+         "token": "河",
+         "start_offset": 4,
+         "end_offset": 5,
+         "type": "<IDEOGRAPHIC>",
+         "position": 4
+      },
+      {
+         "token": "公",
+         "start_offset": 5,
+         "end_offset": 6,
+         "type": "<IDEOGRAPHIC>",
+         "position": 5
+      },
+      {
+         "token": "园",
+         "start_offset": 6,
+         "end_offset": 7,
+         "type": "<IDEOGRAPHIC>",
+         "position": 6
+      }
+   ]
+}
+```
+关键字被分词成单独的每个汉字，然后排重后建立`倒排索引`，每个单独的汉字都为一个`倒排索引`。
+
+#### A: 使用中文分析器，添加字典和中文关键字预处理 ####
+
+**中文分词器的选择**
+* [pinyin 分词器](https://github.com/medcl/elasticsearch-analysis-pinyin)
+* [Mmseg 分词器](https://github.com/medcl/elasticsearch-analysis-mmseg/releases)
+* ik-analyzer
+
+**ik-analyzer**
+
+安装方式请参考[gayhub地址](https://github.com/medcl/elasticsearch-analysis-ik)
+
+IKAnalyzer是一个开源的，基于java语言开发的轻量级的中文分词工具包。
+采用了特有的“正向迭代最细粒度切分算法“，支持细粒度和最大词长两种切分模式；具有83万字/秒（1600KB/S）的高速处理能力。
+采用了多子处理器分析模式，支持：`英文字母、数字、中文词汇等分词处理，兼容韩文、日文字符`
+优化的词典存储，更小的内存占用。支持用户词典扩展定义
+针对Lucene全文检索优化的查询分析器IKQueryParser(作者吐血推荐)；引入简单搜索表达式，采用歧义分析算法优化查询关键字的搜索排列组合，能极大的提高Lucene检索的命中率。
+
+ik 带有两个分词器
+* ik_max_word：会将文本做最细粒度的拆分；尽可能多的拆分出词语
+* ik_smart：会做最粗粒度的拆分；已被分出的词语将不会再次被其它词语占有
+
+ik_max_word分词效果
+```
+POST _analyze
+{
+  "tokenizer": "ik_max_word",
+  "text":      "天河区天河公园"
+}
+```
+
+```json(type)
+{
+   "tokens": [
+      {
+         "token": "天河区",
+         "start_offset": 0,
+         "end_offset": 3,
+         "type": "CN_WORD",
+         "position": 0
+      },
+      {
+         "token": "天河",
+         "start_offset": 0,
+         "end_offset": 2,
+         "type": "CN_WORD",
+         "position": 1
+      },
+      {
+         "token": "河",
+         "start_offset": 1,
+         "end_offset": 2,
+         "type": "CN_WORD",
+         "position": 2
+      },
+      {
+         "token": "区",
+         "start_offset": 2,
+         "end_offset": 3,
+         "type": "CN_CHAR",
+         "position": 3
+      },
+      {
+         "token": "天河",
+         "start_offset": 3,
+         "end_offset": 5,
+         "type": "CN_WORD",
+         "position": 4
+      },
+      {
+         "token": "河",
+         "start_offset": 4,
+         "end_offset": 5,
+         "type": "CN_WORD",
+         "position": 5
+      },
+      {
+         "token": "公园",
+         "start_offset": 5,
+         "end_offset": 7,
+         "type": "CN_WORD",
+         "position": 6
+      }
+   ]
+}
+```
+
+ik_smart分析效果
+```
+POST _analyze
+{
+  "tokenizer": "ik_smart",
+  "text":      "天河区天河公园"
+}
+```
+
+```json(type)
+{
+   "tokens": [
+      {
+         "token": "天河区",
+         "start_offset": 0,
+         "end_offset": 3,
+         "type": "CN_WORD",
+         "position": 0
+      },
+      {
+         "token": "天河",
+         "start_offset": 3,
+         "end_offset": 5,
+         "type": "CN_WORD",
+         "position": 1
+      },
+      {
+         "token": "公园",
+         "start_offset": 5,
+         "end_offset": 7,
+         "type": "CN_WORD",
+         "position": 2
+      }
+   ]
+}
+```
+
+**添加字典**
+
+上述的两种分词模式虽然能满足很多使用场景，但对于一些特殊情况，
+例如`张小三`是一个用户的名字，分析结果如下：
+```
+{
+   "tokens": [
+      {
+         "token": "张",
+         "start_offset": 0,
+         "end_offset": 1,
+         "type": "CN_CHAR",
+         "position": 0
+      },
+      {
+         "token": "小三",
+         "start_offset": 1,
+         "end_offset": 3,
+         "type": "CN_WORD",
+         "position": 1
+      }
+   ]
+}
+```
+我们想让分析器以`张小三`为一个词条而不是`张`和`小三`。这时候可以使用ik分词器的字典功能。
+
+修改分析器目录下的`config/IKAnalyzer.cfg.xml`
+```xml(type)
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+	<comment>IK Analyzer 扩展配置</comment>
+	<!--用户可以在这里配置自己的扩展字典 -->
+	<entry key="ext_dict">custom/mydict.dic;custom/single_word_low_freq.dic</entry>
+	 <!--用户可以在这里配置自己的扩展停止词字典-->
+	<entry key="ext_stopwords">custom/ext_stopword.dic</entry>
+ 	<!--用户可以在这里配置远程扩展字典 -->
+	<entry key="remote_ext_dict">location</entry>
+ 	<!--用户可以在这里配置远程扩展停止词字典-->
+	<entry key="remote_ext_stopwords">http://xxx.com/xxx.dic</entry>
+</properties>
+```
+
+在使用中文分析器后，查询精度虽然提高了，但还是不准确，搜索`天河区天河公园`还是得不到想要的结果，
+但我发现关键字输入`天河区 天河 公园`，用空格隔开就能查询到很准确的结果。所以针对中文的关键字，
+还做了一下预处理（预分词）来提高查询准确度。
+```java(type)
+//分词器
+String analyzer = PropertiesUtil.getAsString(ES_CONFIG,"search.cn_analyzer");
+//构建分析请求
+AnalyzeRequestBuilder analyzeRequestBuilder = new AnalyzeRequestBuilder(client, AnalyzeAction.INSTANCE,
+        simpleParam.getIndex(),chineseParamsList.toArray(new String[]{}));
+analyzeRequestBuilder.setTokenizer(analyzer);
+
+//查询
+List<AnalyzeResponse.AnalyzeToken> ikTokenList = analyzeRequestBuilder.execute().actionGet().getTokens();
+
+//处理结果
+List<String> pretreatedCNList = new ArrayList<>();
+ikTokenList.forEach(ikToken -> {
+    String item = ikToken.getTerm();
+    //排重
+    if(!pretreatedCNList.contains(item)){
+        pretreatedCNList.add(item);
+    }
+});
+``
+
+#### Q: 索引重建 ####
+为了提高查询的精确度，经常会对索引的映射进行修改。但是对于有数据的索引来说，
+必须要先删除索引才能重建，这样又要重新通过JDBC从数据库里获取数据。非常耗时而且要停机。
+
+#### A: 使用Reindex API进行重建，索引别名实现零停机 ####
+**Reindex API**
+
+从Elasticsearch v2.3.0开始， [Reindex API](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/docs-reindex.html) 被引入。它能够对文档重建索引而不需要任何插件或外部工具。
+
+```
+POST _reindex
+{
+  "source": {
+    "index": "twitter"
+  },
+  "dest": {
+    "index": "new_twitter"
+  }
+}
+```
+类似于传统数据库中的
+```
+CREATE TABLE NEW_TAB AS (SELECT * FROM TAB)
+```
+当然`Reindex API`也是支持按条件进行重建，此处不详讲。
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/warning.png)| Reindex 不会试图去设置目标索引。<br> 也不会复制源索引的设置与映射。<br> 在Reindex 操作之前，你应该要先设置目标索引的分片数、副本数、映射等相关设置。
+----|----
+
+**索引别名**
+
+在前面提到的，重建索引的问题是必须更新应用中的索引名称。 索引别名就是用来解决这个问题的！
+
+索引`别名`就像一个快捷方式或软连接，可以指向一个或多个索引，也可以给任何一个需要索引名的API来使用。
+可以理解为`视图`
+
+有两种方式管理别名：`_alias`用于单个操作，`_aliases`用于执行多个原子级操作。
+
+假设你的应用有一个叫 my_index 的索引。事实上， my_index 是一个指向当前真实索引的别名。真实索引包含一个版本号： my_index_v1 ， my_index_v2 等等。
+
+首先，创建索引 my_index_v1 ，然后将别名 my_index 指向它：
+```
+PUT /my_index_v1                    --创建索引 my_index_v1 。
+PUT /my_index_v1/_alias/my_index    --设置别名 my_index 指向 my_index_v1 。
+```
+你可以检测这个别名指向哪一个索引：
+```
+GET /*/_alias/my_index
+```
+或哪些别名指向这个索引：
+```
+GET /my_index_v1/_alias/*
+```
+两者都会返回下面的结果：
+```
+{
+    "my_index_v1" : {
+        "aliases" : {
+            "my_index" : { }
+        }
+    }
+}
+```
+然后，我们决定修改`my_index_v1`中一个字段的映射。当然，我们不能修改现存的映射，所以我们必须重新索引数据。
+首先, 我们用`新映射`创建索引`my_index_v2`，然后从`my_index_v1`中`Reindex`数据到`my_index_v2`。
+
+一旦我们确定文档已经被正确地重索引了，我们就将别名指向新的索引。
+
+一个别名可以指向多个索引，所以我们在添加别名到新索引的同时必须从旧的索引中删除它。这个操作需要原子化，这意味着我们需要使用 _aliases 操作：
+```
+POST /_aliases
+{
+    "actions": [
+        { "remove": { "index": "my_index_v1", "alias": "my_index" }},
+        { "add":    { "index": "my_index_v2", "alias": "my_index" }}
+    ]
+}
+```
+此时别名`my_index`已经从`my_index_v1`指向到了`my_index_v2`。
+外部访问`my_index`时，实际上是指向到了`my_index_v2`。
+这时候把旧的`my_index_v1`索引删除掉。这样一套操作下来，开销很小，应该广泛使用。
+
+#### Q: 检索关键字包含特殊字符 ####
+大家都知道很多系统都有自己的保留字，有特殊含意，不能作为条件或者参数使用。
+ElasticSearch也不例外，不小心中招的话，轻则报错，重则宕机。
+
+#### A: 保留字消义 ####
+现在列举一下ElasticSearch的保留字符：
+```
++ - = && || > < ! ( ) { } [ ] ^ " ~ * ? : \ /
+```
+如果你想查询`(1+1)=2`这个内容，关键字要处理成这样：
+```
+\(1\+1\)\=2
+```
+
+![](https://github.com/AziCat/ElasticSearch-Simple-Share/raw/master/res/warning.png)| < 和 > 不能被消义。处理它的方法就是把它从关键字中去掉:smirk:<br>同时，也要注意空格' '也是保留字之一且不能消义，其作用是分隔关键字。<br>文档中的空格在分析器工作时已被去掉，所以不用担心文档会保存空格。
+----|----
+
+#### Q: 检索关键字个数太多 ####
+有次随便瞎搞的时候，放了2000多个关键字去进行检索，结果报错
+```
+Query DSL: Allow to control (globally) the max clause count for `bool` query (defaults to 1024)
+```
+
+#### A: 控制关键字个数Or修改设置 ####
+就跟select * from tab where field in (...)一样，in里面参数的数量不能超过1000。
+ElasticSearch也有数量控制，也刚好是个整数1024。
+
+为了避免这种情况，最好的处理方式是控制参数的个数，因为大数量的参数会影响检索效率。
+如果一定要查这么多参数。ElasticSearch的[issues](https://github.com/elastic/elasticsearch/issues/482)给出了方法：
+设置`match_phrase_prefix`的大小。
+
+#### Q: 权限控制&监控 ####
+不知道大家有没有发现，当我们启动了ElasticSearch之后，就能通过Restful API来进行相关操作。
+并不需要登录，也没有什么权限控制，只要知道ElasticSearch的ip和port就能为所欲为。
+这时怕是被人脱库或者删库都不知道是谁干的。
+
+#### A: 使用官方提供的插件 ####
+* Kibana
+* X‑Pack
+
+`Kibana`让您能够可视化`Elasticsearch`中的数据并对其进行操作。
+有了`Kibana`，在为`Elastic Stack`管理设置或配置`X‑Pack security`功能来保护、监控和配置`Elastic Stack`。
+命令行不再是唯一途径。
+与此同时，得益于非常出色的 API，现在的`Elastic Stack`操作变得更加直观，
+能够让更加广泛的受众上手操作。
+
+详细可参见[官方网址](https://www.elastic.co/cn/products/kibana)
+
+注：官方的插件并不是完全免费的喔:joy:
+
+## ##
+
+## 参考内容 ##
+* [Elasticsearch: 权威指南](https://www.elastic.co/guide/cn/elasticsearch/guide/current/index.html)（难得的中文文档喔，不过针对的是 Elasticsearch 2.x的，阅读时请注意）
+* [Elasticsearch Reference](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/index.html)（官方文档，英语好的小伙伴可以看这个，针对5.5版本的，目前最新的更新为5.6版本）
+* [elastic/elasticsearch · GitHub](https://github.com/elastic/elasticsearch)（ElasticSearch的开源地址）
+* 百度百科
