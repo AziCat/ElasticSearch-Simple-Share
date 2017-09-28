@@ -1408,4 +1408,5 @@ ElasticSearch也有数量控制，也刚好是个整数1024。
 * [Elasticsearch: 权威指南](https://www.elastic.co/guide/cn/elasticsearch/guide/current/index.html)（难得的中文文档喔，不过针对的是 Elasticsearch 2.x的，阅读时请注意）
 * [Elasticsearch Reference](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/index.html)（官方文档，英语好的小伙伴可以看这个，针对5.5版本的，目前最新的更新为5.6版本）
 * [elastic/elasticsearch · GitHub](https://github.com/elastic/elasticsearch)（ElasticSearch的开源地址）
+* [java客户端 API](https://www.elastic.co/guide/en/elasticsearch/client/java-api/5.5/index.html)
 * 百度百科
